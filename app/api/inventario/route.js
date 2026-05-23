@@ -1,6 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET() {
   try {
@@ -14,8 +15,15 @@ export async function GET() {
       itens: itens.filter(i => i.papeleta === c.papeleta)
     }));
 
-    return Response.json({ success: true, caixas: resultado });
+    return new Response(JSON.stringify({ success: true, caixas: resultado }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache',
+      }
+    });
   } catch (e) {
-    return Response.json({ success: false, error: e.message }, { status: 500 });
+    return new Response(JSON.stringify({ success: false, error: e.message }), { status: 500 });
   }
 }
