@@ -1,6 +1,6 @@
 export const metadata = {
-  title: 'Kyly Picking',
-  description: 'Sistema de Picking - Grupo Kyly',
+  title: 'Picking',
+  description: 'Sistema de Picking',
 };
 
 export default function RootLayout({ children }) {

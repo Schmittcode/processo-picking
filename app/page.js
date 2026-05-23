@@ -415,7 +415,7 @@ export default function Home() {
           </>
         )}
 
-        {/* ===== CONSULTAR ESTOQUE ===== */}
+        {/*CONSULTAR ESTOQUE */}
         {tela === 'estoque' && (
           <>
             <header style={estilos.header}><h1 style={estilos.headerH1}>Consultar Estoque</h1></header>
@@ -449,7 +449,7 @@ export default function Home() {
           </>
         )}
 
-        {/* ===== INVENTÁRIO ===== */}
+        {/*INVENTÁRIO*/}
         {tela === 'inventario' && !caixaSelecionada && (
           <>
             <header style={{...estilos.header, backgroundColor:'#6f42c1'}}><h1 style={estilos.headerH1}>Inventário</h1></header>
