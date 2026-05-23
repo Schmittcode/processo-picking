@@ -1,21 +1,18 @@
-import { getDb } from '../../../lib/db';
+import { neon } from '@neondatabase/serverless';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const sql = getDb();
-    const caixas = await sql`
-      SELECT * FROM caixas 
-      WHERE status = 'finalizada' 
-      ORDER BY criado_em DESC
-    `;
+    const sql = neon(process.env.DATABASE_URL);
+    
+    const caixas = await sql`SELECT * FROM caixas WHERE status = 'finalizada' ORDER BY criado_em DESC`;
+    const itens = await sql`SELECT * FROM itens_picking ORDER BY id`;
 
-    const resultado = [];
-    for (const caixa of caixas) {
-      const itens = await sql`
-        SELECT * FROM itens_picking WHERE papeleta = ${caixa.papeleta} ORDER BY id
-      `;
-      resultado.push({ ...caixa, itens });
-    }
+    const resultado = caixas.map(c => ({
+      ...c,
+      itens: itens.filter(i => i.papeleta === c.papeleta)
+    }));
 
     return Response.json({ success: true, caixas: resultado });
   } catch (e) {
