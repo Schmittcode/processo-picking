@@ -5,7 +5,7 @@ export async function POST(request) {
     const { papeleta, codigo_peca, operador, item_id } = await request.json();
     const sql = getDb();
 
-    // Verifica se a peça já foi bipada
+    // Verifica se a peça já foi bipada neste pedido
     const jaLida = await sql`
       SELECT * FROM bipagens WHERE papeleta = ${papeleta} AND codigo_peca = ${codigo_peca}
     `;
@@ -13,15 +13,18 @@ export async function POST(request) {
       return Response.json({ success: false, tipo: 'sem_saldo', message: 'Peça sem saldo - já bipada' });
     }
 
-    // Verifica se a peça pertence a este item
-    const item = await sql`SELECT * FROM itens_picking WHERE id = ${item_id}`;
+    // Busca o item pelo id E pela papeleta para garantir consistência
+    const item = await sql`
+      SELECT * FROM itens_picking WHERE id = ${item_id} AND papeleta = ${papeleta}
+    `;
     if (item.length === 0) {
       return Response.json({ success: false, tipo: 'sku_errada', message: 'SKU não pertence à caixa' });
     }
 
     // Registra a bipagem
     await sql`
-      INSERT INTO bipagens (papeleta, codigo_peca, operador) VALUES (${papeleta}, ${codigo_peca}, ${operador})
+      INSERT INTO bipagens (papeleta, codigo_peca, operador) 
+      VALUES (${papeleta}, ${codigo_peca}, ${operador})
     `;
 
     // Atualiza qtd coletada
