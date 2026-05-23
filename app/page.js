@@ -436,11 +436,13 @@ export default function Home() {
 
 const estilos = {
   body: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#00c3ff',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'flex-start',
+    width: '100vw',
     height: '100vh',
+    height: '100dvh',
     overflow: 'hidden',
   },
   container: {
@@ -448,6 +450,7 @@ const estilos = {
     width: '100%',
     maxWidth: 480,
     height: '100vh',
+    height: '100dvh',
     border: 'none',
     display: 'flex',
     flexDirection: 'column',
