@@ -189,10 +189,7 @@ export default function Home() {
                 <button style={estilos.btnCam} onClick={() => setScanner('operador')}>📷</button>
               </div>
               <button style={estilos.btnEntrar} onClick={fazerLogin}>ENTRAR</button>
-              <a href="/codigos" style={{textAlign:'center',color:'#00c3ff',fontSize:13,marginTop:8,textDecoration:'none'}}>
-                📋 Ver códigos de demonstração
-              </a>
-            </main>
+              </main>
           </>
         )}
 
