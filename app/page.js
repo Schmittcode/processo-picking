@@ -2,25 +2,19 @@
 import { useState, useEffect, useRef } from 'react';
 import Scanner from './components/Scanner';
 
-// ============================================================
-// SONS - volume alto via Web Audio API
-// ============================================================
 function beep(freq, duration, type = 'sine', volume = 1.0) {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+    osc.connect(gain); gain.connect(ctx.destination);
     osc.type = type;
     osc.frequency.setValueAtTime(freq, ctx.currentTime);
     gain.gain.setValueAtTime(volume, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + duration);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + duration);
   } catch {}
 }
-
 function beepSucesso()   { beep(1400, 0.12, 'sine', 1.0); }
 function beepDuplo()     { beep(1400, 0.1, 'sine', 1.0); setTimeout(() => beep(1700, 0.15, 'sine', 1.0), 160); }
 function beepLogin()     { beep(1200, 0.1, 'sine', 1.0); }
@@ -42,6 +36,9 @@ export default function Home() {
   const [resumo, setResumo] = useState({ itens: 0, pecas: 0 });
   const [codigoDigitado, setCodigoDigitado] = useState('');
   const [scanner, setScanner] = useState(null);
+  const [estoque, setEstoque] = useState([]);
+  const [inventario, setInventario] = useState([]);
+  const [caixaSelecionada, setCaixaSelecionada] = useState(null);
   const inputBipRef = useRef(null);
   const inputSupRef = useRef(null);
   const inputOpRef = useRef(null);
@@ -51,6 +48,8 @@ export default function Home() {
     if (tela === 'login') inputSupRef.current?.focus();
     if (tela === 'abertura') inputPapRef.current?.focus();
     if (tela === 'coleta' && !feedback) setTimeout(() => inputBipRef.current?.focus(), 200);
+    if (tela === 'estoque') carregarEstoque();
+    if (tela === 'inventario') carregarInventario();
   }, [tela, feedback]);
 
   function handleScan(codigo) {
@@ -65,15 +64,11 @@ export default function Home() {
   async function fazerLogin() {
     if (!supervisor || !operador) { alert('Bipe o Supervisor e o Operador!'); return; }
     try {
-      const res = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ supervisor, operador })
-      });
+      const res = await fetch('/api/auth', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ supervisor, operador }) });
       const data = await res.json();
       if (data.success) { beepLogin(); setTela('menu'); }
-      else { beepErro(); alert('Acesso Negado! Verifique os códigos.'); }
-    } catch { alert('Erro de conexão com o servidor.'); }
+      else { beepErro(); alert('Acesso Negado!'); }
+    } catch { alert('Erro de conexão.'); }
   }
 
   async function abrirCaixa(e) {
@@ -84,13 +79,22 @@ export default function Home() {
   async function abrirCaixaCodigo(cod) {
     if (!cod) return;
     try {
-      const res = await fetch('/api/caixas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ papeleta: cod })
-      });
+      const res = await fetch('/api/caixas', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ papeleta: cod }) });
       const data = await res.json();
       if (!data.success) { beepErro(); alert('Caixa não encontrada!'); return; }
+
+      // CAIXA JÁ FINALIZADA
+      if (data.caixa.status === 'finalizada') {
+        beepFinalizado();
+        const totalPecas = data.itens.reduce((acc, i) => acc + i.qtd, 0);
+        setResumo({ itens: data.itens.length, pecas: totalPecas });
+        setListaPicking(data.itens);
+        setCaixaInfo(data.caixa);
+        setPapeleta(cod);
+        setTela('finalizada');
+        return;
+      }
+
       beepCaixa();
       setListaPicking(data.itens);
       setCaixaInfo(data.caixa);
@@ -118,17 +122,9 @@ export default function Home() {
   async function processarBipagemCodigo(codigo) {
     if (!codigo || !itemAtual) return;
     try {
-      const res = await fetch('/api/picking/bipar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ papeleta, codigo_peca: codigo, operador, item_id: itemAtual.id })
-      });
+      const res = await fetch('/api/picking/bipar', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ papeleta, codigo_peca: codigo, operador, item_id: itemAtual.id }) });
       const data = await res.json();
-      if (!data.success) {
-        beepErro();
-        setFeedback(data.tipo === 'sem_saldo' ? 'sem_saldo' : 'erro_sku');
-        return;
-      }
+      if (!data.success) { beepErro(); setFeedback(data.tipo === 'sem_saldo' ? 'sem_saldo' : 'erro_sku'); return; }
       const novasPecas = pecasColetadas + 1;
       if (data.completo) {
         const proxIdx = itemAtualIndice + 1;
@@ -154,11 +150,7 @@ export default function Home() {
   }
 
   async function salvarCaixa(finalizada = false) {
-    await fetch('/api/picking/salvar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ papeleta, operador, item_atual: itemAtualIndice, pecas_no_item: pecasColetadas, finalizada })
-    });
+    await fetch('/api/picking/salvar', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ papeleta, operador, item_atual: itemAtualIndice, pecas_no_item: pecasColetadas, finalizada }) });
   }
 
   function pularSku() {
@@ -174,7 +166,25 @@ export default function Home() {
     setTela('abertura');
   }
 
+  async function carregarEstoque() {
+    try {
+      const res = await fetch('/api/estoque');
+      const data = await res.json();
+      if (data.success) setEstoque(data.caixas);
+    } catch {}
+  }
+
+  async function carregarInventario() {
+    try {
+      const res = await fetch('/api/inventario');
+      const data = await res.json();
+      if (data.success) setInventario(data.caixas);
+    } catch {}
+  }
+
   const itemAtual = listaPicking[itemAtualIndice];
+  const corStatus = { aberta: '#00c300', parcial: '#ff7e1a', finalizada: '#1a3a8a' };
+  const labelStatus = { aberta: 'Aberta', parcial: 'Parcial', finalizada: 'Finalizada' };
 
   return (
     <div style={estilos.body}>
@@ -182,7 +192,7 @@ export default function Home() {
 
         {scanner && <Scanner onScan={handleScan} onClose={() => setScanner(null)} />}
 
-        {/* ===== LOGIN ===== */}
+        {/* LOGIN */}
         {tela === 'login' && (
           <>
             <header style={estilos.header}><h1 style={estilos.headerH1}>Picking 1° Turno</h1></header>
@@ -192,7 +202,7 @@ export default function Home() {
                 <input ref={inputSupRef} style={estilos.input} value={supervisor}
                   onChange={e => setSupervisor(e.target.value)}
                   onKeyDown={e => { if(e.key==='Enter'){ beepLogin(); inputOpRef.current?.focus(); }}}
-                  placeholder="Bipe ou digite o código" />
+                  inputMode="none" autoComplete="off" placeholder="Bipe o código" />
                 <button style={estilos.btnCam} onClick={() => setScanner('supervisor')}>📷</button>
               </div>
               <label style={estilos.label}>Código do Operador</label>
@@ -200,7 +210,7 @@ export default function Home() {
                 <input ref={inputOpRef} style={estilos.input} value={operador}
                   onChange={e => setOperador(e.target.value)}
                   onKeyDown={e => { if(e.key==='Enter'){ beepLogin(); fazerLogin(); }}}
-                  placeholder="Bipe ou digite o código" />
+                  inputMode="none" autoComplete="off" placeholder="Bipe o código" />
                 <button style={estilos.btnCam} onClick={() => setScanner('operador')}>📷</button>
               </div>
               <button style={estilos.btnEntrar} onClick={fazerLogin}>ENTRAR</button>
@@ -208,27 +218,24 @@ export default function Home() {
           </>
         )}
 
-        {/* ===== MENU ===== */}
+        {/* MENU */}
         {tela === 'menu' && (
           <>
             <header style={estilos.header}><h1 style={estilos.headerH1}>Menu Principal</h1></header>
             <main style={{...estilos.main, gap:12}}>
-              <button style={{...estilos.btnMenu, backgroundColor:'#5cb85c', color:'white'}}
-                onClick={() => setTela('abertura')}>Montar Pedido</button>
-              <button style={estilos.btnMenu}>Consultar Estoque</button>
-              <button style={estilos.btnMenu}>Inventário</button>
+              <button style={{...estilos.btnMenu, backgroundColor:'#5cb85c', color:'white'}} onClick={() => setTela('abertura')}>Montar Pedido</button>
+              <button style={{...estilos.btnMenu, backgroundColor:'#223a8e', color:'white'}} onClick={() => setTela('estoque')}>Consultar Estoque</button>
+              <button style={{...estilos.btnMenu, backgroundColor:'#6f42c1', color:'white'}} onClick={() => setTela('inventario')}>Inventário</button>
             </main>
           </>
         )}
 
-        {/* ===== ABERTURA DE CAIXA ===== */}
+        {/* ABERTURA */}
         {tela === 'abertura' && !caixaInfo && (
           <>
             <header style={estilos.header}><h1 style={estilos.headerH1}>Abertura de Caixa</h1></header>
             <main style={{...estilos.main, alignItems:'center', padding:30}}>
-              <p style={{color:'#555',fontSize:18,fontWeight:'bold',marginBottom:30,textAlign:'center'}}>
-                Bipe a papeleta da caixa
-              </p>
+              <p style={{color:'#555',fontSize:18,fontWeight:'bold',marginBottom:30,textAlign:'center'}}>Bipe a papeleta da caixa</p>
               <div style={{border:'2px dashed #ccc',borderRadius:15,padding:30,display:'flex',flexDirection:'column',alignItems:'center',marginBottom:30,width:'100%'}}>
                 <div style={{fontSize:48,marginBottom:10}}>📦</div>
                 <div style={{color:'#999',letterSpacing:2}}>||||||||||||||</div>
@@ -236,11 +243,10 @@ export default function Home() {
               <div style={estilos.inputRow}>
                 <input ref={inputPapRef} style={{...estilos.input, border:'2px solid #00bcff', textAlign:'center'}}
                   value={papeleta} onChange={e => setPapeleta(e.target.value)}
-                  onKeyDown={abrirCaixa} placeholder="Aguardando bipagem" />
+                  onKeyDown={abrirCaixa} inputMode="none" autoComplete="off" placeholder="Aguardando bipagem" />
                 <button style={estilos.btnCam} onClick={() => setScanner('papeleta')}>📷</button>
               </div>
-              <button style={{...estilos.btnCancelar, marginTop:'auto'}}
-                onClick={() => { setTela('menu'); setPapeleta(''); }}>CANCELAR</button>
+              <button style={{...estilos.btnCancelar, marginTop:'auto'}} onClick={() => { setTela('menu'); setPapeleta(''); }}>CANCELAR</button>
             </main>
           </>
         )}
@@ -252,13 +258,9 @@ export default function Home() {
             <main style={{...estilos.main, alignItems:'center', padding:30}}>
               <div style={{backgroundColor:'#d4edda',border:'2px solid #28a745',borderRadius:15,padding:20,width:'100%',marginTop:20}}>
                 <div style={{color:'#28a745',fontWeight:'bold',fontSize:18,marginBottom:15}}>✔ Caixa Identificada</div>
-                <div style={{display:'flex',justifyContent:'space-between',fontSize:18,padding:'5px 0'}}>
-                  <span>Caixa:</span><strong>{papeleta}</strong>
-                </div>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:18,padding:'5px 0'}}><span>Caixa:</span><strong>{papeleta}</strong></div>
                 <hr style={{border:0,borderTop:'1px solid #28a745',margin:'10px 0',opacity:0.3}}/>
-                <div style={{display:'flex',justifyContent:'space-between',fontSize:18,padding:'5px 0'}}>
-                  <span>Pedido:</span><strong>{caixaInfo.pedido}</strong>
-                </div>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:18,padding:'5px 0'}}><span>Pedido:</span><strong>{caixaInfo.pedido}</strong></div>
               </div>
               <button style={{...estilos.btnConfirmar, marginTop:'auto'}} onClick={confirmarInicio}>Confirmar e iniciar</button>
               <button style={estilos.btnCancelar} onClick={() => { setCaixaInfo(null); setPapeleta(''); }}>CANCELAR</button>
@@ -269,9 +271,7 @@ export default function Home() {
         {/* RETOMADA */}
         {feedback === 'retomada' && (
           <div style={{...estilos.overlay, backgroundColor:'white', zIndex:9999, flexDirection:'column'}}>
-            <header style={{...estilos.header, backgroundColor:'#ff7e1a'}}>
-              <h1 style={estilos.headerH1}>⚠️ Caixa Parcial Identificada</h1>
-            </header>
+            <header style={{...estilos.header, backgroundColor:'#ff7e1a'}}><h1 style={estilos.headerH1}>⚠️ Caixa Parcial Identificada</h1></header>
             <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:20,textAlign:'center'}}>
               <div style={{width:100,height:100,border:'6px solid #ff7e1a',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:60,color:'#ff7e1a',marginBottom:40}}>i</div>
               <div style={{border:'3px solid #ff7e1a',borderRadius:15,padding:20,width:'80%',backgroundColor:'#fff5ed',textAlign:'center',marginBottom:20}}>
@@ -283,7 +283,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* ===== COLETA ===== */}
+        {/* COLETA */}
         {tela === 'coleta' && !feedback && itemAtual && (
           <>
             <header style={estilos.header}><h1 style={estilos.headerH1}>Coleta de Peças</h1></header>
@@ -309,7 +309,8 @@ export default function Home() {
                 <button style={{...estilos.btnColeta,backgroundColor:'#8c8c8c'}} onClick={async()=>{await salvarCaixa(false);setFeedback('parcial');}}>💾 SALVAR CAIXA</button>
               </div>
               <input ref={inputBipRef} style={{position:'absolute',opacity:0,pointerEvents:'none'}}
-                value={codigoDigitado} onChange={e=>setCodigoDigitado(e.target.value)} onKeyDown={processarBipagem} />
+                value={codigoDigitado} onChange={e=>setCodigoDigitado(e.target.value)}
+                onKeyDown={processarBipagem} inputMode="none" autoComplete="off" />
             </main>
           </>
         )}
@@ -347,8 +348,7 @@ export default function Home() {
             <h1 style={{fontSize:36,fontWeight:900,marginBottom:10}}>ERRO</h1>
             <p style={{fontSize:24,fontWeight:'bold',marginBottom:25}}>SKU não pertence à caixa</p>
             <div style={{backgroundColor:'#8b0000',border:'2px solid white',borderRadius:10,padding:20,width:'100%',fontSize:19,fontWeight:'bold',marginBottom:40}}>Verifique o código e tente novamente</div>
-            <button style={{backgroundColor:'white',color:'#ff0000',border:'none',borderRadius:15,padding:18,width:'100%',fontSize:22,fontWeight:900,textTransform:'uppercase',cursor:'pointer'}}
-              onClick={()=>setFeedback(null)}>CONFIRMAR</button>
+            <button style={{backgroundColor:'white',color:'#ff0000',border:'none',borderRadius:15,padding:18,width:'100%',fontSize:22,fontWeight:900,textTransform:'uppercase',cursor:'pointer'}} onClick={()=>setFeedback(null)}>CONFIRMAR</button>
           </div>
         )}
 
@@ -359,27 +359,20 @@ export default function Home() {
             <h1 style={{fontSize:36,fontWeight:900,marginBottom:10}}>ERRO</h1>
             <p style={{fontSize:24,fontWeight:'bold',marginBottom:25}}>Peça sem saldo</p>
             <div style={{backgroundColor:'#b30000',border:'3px solid white',borderRadius:15,padding:25,width:'100%',fontSize:20,fontWeight:'bold',marginBottom:50,lineHeight:1.2}}>Esta peça já foi bipada ou não é mais necessária</div>
-            <button style={{backgroundColor:'#ffe6e6',color:'#ff0000',border:'none',borderRadius:15,padding:20,width:'100%',fontSize:32,fontWeight:900,textTransform:'uppercase',cursor:'pointer'}}
-              onClick={()=>setFeedback(null)}>CONFIRMAR</button>
+            <button style={{backgroundColor:'#ffe6e6',color:'#ff0000',border:'none',borderRadius:15,padding:20,width:'100%',fontSize:32,fontWeight:900,textTransform:'uppercase',cursor:'pointer'}} onClick={()=>setFeedback(null)}>CONFIRMAR</button>
           </div>
         )}
 
         {/* ITEM EM FALTA */}
         {tela==='coleta' && feedback==='item_falta' && (
           <div style={{...estilos.overlay,backgroundColor:'white',flexDirection:'column',border:'1px solid #ff7e1a'}}>
-            <header style={{backgroundColor:'#ff7e1a',padding:10,textAlign:'center',color:'white'}}>
-              <h1 style={{fontSize:22,fontWeight:'bold'}}>⚠️ Item em Falta</h1>
-            </header>
+            <header style={{backgroundColor:'#ff7e1a',padding:10,textAlign:'center',color:'white'}}><h1 style={{fontSize:22,fontWeight:'bold'}}>⚠️ Item em Falta</h1></header>
             <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:20,textAlign:'center'}}>
-              <div style={{border:'3px solid #ff4b4b',backgroundColor:'#ffe5e5',borderRadius:10,padding:20,color:'#cc0000',fontWeight:'bold',marginBottom:30,width:'100%'}}>
-                Não foi possível encontrar a peça no endereço.
-              </div>
+              <div style={{border:'3px solid #ff4b4b',backgroundColor:'#ffe5e5',borderRadius:10,padding:20,color:'#cc0000',fontWeight:'bold',marginBottom:30,width:'100%'}}>Não foi possível encontrar a peça no endereço.</div>
               <p style={{color:'#555',marginBottom:30,fontSize:16}}>Deseja buscar localizações alternativas no estoque?</p>
               <div style={{width:'100%',display:'flex',flexDirection:'column',gap:15}}>
-                <button style={{backgroundColor:'#00c800',color:'white',border:'none',padding:18,borderRadius:12,fontWeight:'bold',fontSize:18,cursor:'pointer'}}
-                  onClick={()=>alert('Funcionalidade em desenvolvimento')}>SIM, BUSCAR ALTERNATIVA</button>
-                <button style={{backgroundColor:'#5d6166',color:'white',border:'none',padding:18,borderRadius:12,fontWeight:'bold',fontSize:18,cursor:'pointer'}}
-                  onClick={pularSku}>NÃO, PULAR SKU</button>
+                <button style={{backgroundColor:'#00c800',color:'white',border:'none',padding:18,borderRadius:12,fontWeight:'bold',fontSize:18,cursor:'pointer'}} onClick={()=>alert('Funcionalidade em desenvolvimento')}>SIM, BUSCAR ALTERNATIVA</button>
+                <button style={{backgroundColor:'#5d6166',color:'white',border:'none',padding:18,borderRadius:12,fontWeight:'bold',fontSize:18,cursor:'pointer'}} onClick={pularSku}>NÃO, PULAR SKU</button>
               </div>
             </div>
           </div>
@@ -388,9 +381,7 @@ export default function Home() {
         {/* PARCIAL */}
         {feedback==='parcial' && (
           <div style={{...estilos.overlay,backgroundColor:'#ff7e1a',flexDirection:'column'}}>
-            <header style={{backgroundColor:'#e66a00',padding:10,textAlign:'center',color:'white'}}>
-              <h1 style={{fontSize:20}}>⚠️ Atenção</h1>
-            </header>
+            <header style={{backgroundColor:'#e66a00',padding:10,textAlign:'center',color:'white'}}><h1 style={{fontSize:20}}>⚠️ Atenção</h1></header>
             <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:20,textAlign:'center',color:'white'}}>
               <div style={{width:110,height:110,background:'white',border:'4px solid black',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:70,color:'black',fontWeight:'bold',marginBottom:20}}>!</div>
               <h2 style={{fontSize:32,marginBottom:25,lineHeight:1.1}}>Caixa com Picking Parcial</h2>
@@ -399,8 +390,7 @@ export default function Home() {
                 <strong style={{fontSize:24,display:'block',marginTop:5}}>Caixas Abertas</strong>
               </div>
               <p style={{fontSize:16,marginBottom:40,opacity:0.9}}>A caixa poderá ser completada posteriormente</p>
-              <button style={{backgroundColor:'#fff1e6',color:'#ff7e1a',border:'none',borderRadius:15,padding:20,width:'100%',fontSize:24,fontWeight:900,textTransform:'uppercase',cursor:'pointer'}}
-                onClick={()=>{setFeedback(null);setTela('menu');}}>CONFIRMAR E SALVAR</button>
+              <button style={{backgroundColor:'#fff1e6',color:'#ff7e1a',border:'none',borderRadius:15,padding:20,width:'100%',fontSize:24,fontWeight:900,textTransform:'uppercase',cursor:'pointer'}} onClick={()=>{setFeedback(null);setTela('menu');}}>CONFIRMAR E SALVAR</button>
             </div>
           </div>
         )}
@@ -408,9 +398,7 @@ export default function Home() {
         {/* FINALIZADA */}
         {tela==='finalizada' && (
           <>
-            <header style={{...estilos.header,backgroundColor:'#1a3a8a'}}>
-              <h1 style={{...estilos.headerH1,fontSize:24,fontWeight:900}}>CAIXA FINALIZADA!</h1>
-            </header>
+            <header style={{...estilos.header,backgroundColor:'#1a3a8a'}}><h1 style={{...estilos.headerH1,fontSize:24,fontWeight:900}}>CAIXA FINALIZADA!</h1></header>
             <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:30,textAlign:'center',backgroundColor:'#f8f9fa'}}>
               <div style={{width:140,height:140,backgroundColor:'white',border:'5px solid #1a3a8a',borderRadius:'50%',display:'flex',position:'relative',alignItems:'center',justifyContent:'center',fontSize:60,marginBottom:20}}>
                 📦
@@ -419,15 +407,99 @@ export default function Home() {
               <h2 style={{color:'#1a3a8a',fontSize:28,marginBottom:10}}>Tudo pronto!</h2>
               <p style={{color:'#666',fontSize:16,marginBottom:30}}>A caixa foi selada e registrada com sucesso.</p>
               <div style={{width:'100%',background:'white',border:'1px solid #ddd',borderRadius:15,padding:15,marginBottom:40}}>
-                <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid #eee',fontSize:18}}>
-                  <span>Itens:</span><strong>{resumo.itens}</strong>
-                </div>
-                <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',fontSize:18}}>
-                  <span>Peças:</span><strong>{resumo.pecas}</strong>
-                </div>
+                <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid #eee',fontSize:18}}><span>Itens:</span><strong>{resumo.itens}</strong></div>
+                <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',fontSize:18}}><span>Peças:</span><strong>{resumo.pecas}</strong></div>
               </div>
-              <button style={{width:'100%',padding:20,backgroundColor:'#00c300',color:'white',border:'none',borderRadius:15,fontSize:20,fontWeight:'bold',textTransform:'uppercase',cursor:'pointer'}}
-                onClick={resetarParaNovaCaixa}>INICIAR NOVA CAIXA</button>
+              <button style={{width:'100%',padding:20,backgroundColor:'#00c300',color:'white',border:'none',borderRadius:15,fontSize:20,fontWeight:'bold',textTransform:'uppercase',cursor:'pointer'}} onClick={resetarParaNovaCaixa}>INICIAR NOVA CAIXA</button>
+            </div>
+          </>
+        )}
+
+        {/* ===== CONSULTAR ESTOQUE ===== */}
+        {tela === 'estoque' && (
+          <>
+            <header style={estilos.header}><h1 style={estilos.headerH1}>Consultar Estoque</h1></header>
+            <main style={{...estilos.main, padding:16, overflowY:'auto'}}>
+              {estoque.length === 0 ? (
+                <div style={{textAlign:'center',color:'#888',marginTop:40}}>
+                  <div style={{fontSize:48}}>📭</div>
+                  <p style={{marginTop:12}}>Nenhuma caixa em aberto</p>
+                </div>
+              ) : estoque.map(c => (
+                <div key={c.papeleta} style={{backgroundColor:'#f8f9fa',border:'2px solid #ddd',borderRadius:12,padding:16,marginBottom:12}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                    <div>
+                      <div style={{fontWeight:'bold',fontSize:18}}>📦 {c.papeleta}</div>
+                      <div style={{color:'#666',fontSize:13}}>Pedido: {c.pedido}</div>
+                    </div>
+                    <span style={{backgroundColor: c.status==='parcial' ? '#ff7e1a' : '#00c300', color:'white',padding:'4px 12px',borderRadius:20,fontSize:12,fontWeight:'bold'}}>
+                      {labelStatus[c.status]}
+                    </span>
+                  </div>
+                  {c.itens.map(item => (
+                    <div key={item.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderTop:'1px solid #eee',fontSize:14}}>
+                      <span style={{color:'#333'}}>{item.ref} — {item.cor} — {item.tam}</span>
+                      <span style={{fontWeight:'bold',color: item.qtd_coletada >= item.qtd ? '#00c300' : '#ff7e1a'}}>{item.qtd_coletada}/{item.qtd}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              <button style={{...estilos.btnCancelar, marginTop:16}} onClick={() => setTela('menu')}>← VOLTAR</button>
+            </main>
+          </>
+        )}
+
+        {/* ===== INVENTÁRIO ===== */}
+        {tela === 'inventario' && !caixaSelecionada && (
+          <>
+            <header style={{...estilos.header, backgroundColor:'#6f42c1'}}><h1 style={estilos.headerH1}>Inventário</h1></header>
+            <main style={{...estilos.main, padding:16, overflowY:'auto'}}>
+              {inventario.length === 0 ? (
+                <div style={{textAlign:'center',color:'#888',marginTop:40}}>
+                  <div style={{fontSize:48}}>📋</div>
+                  <p style={{marginTop:12}}>Nenhuma caixa finalizada</p>
+                </div>
+              ) : inventario.map(c => (
+                <button key={c.papeleta} onClick={() => setCaixaSelecionada(c)}
+                  style={{width:'100%',backgroundColor:'white',border:'2px solid #6f42c1',borderRadius:12,padding:16,marginBottom:12,textAlign:'left',cursor:'pointer'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <div>
+                      <div style={{fontWeight:'bold',fontSize:18,color:'#1a3a8a'}}>📦 {c.papeleta}</div>
+                      <div style={{color:'#666',fontSize:13}}>Pedido: {c.pedido} — {c.itens.length} SKUs</div>
+                    </div>
+                    <span style={{backgroundColor:'#1a3a8a',color:'white',padding:'4px 12px',borderRadius:20,fontSize:12,fontWeight:'bold'}}>Finalizada ✔</span>
+                  </div>
+                </button>
+              ))}
+              <button style={{...estilos.btnCancelar, marginTop:16}} onClick={() => setTela('menu')}>← VOLTAR</button>
+            </main>
+          </>
+        )}
+
+        {/* DETALHE CAIXA FINALIZADA NO INVENTÁRIO */}
+        {tela === 'inventario' && caixaSelecionada && (
+          <>
+            <header style={{...estilos.header,backgroundColor:'#1a3a8a'}}><h1 style={{...estilos.headerH1,fontSize:24,fontWeight:900}}>CAIXA FINALIZADA!</h1></header>
+            <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:30,textAlign:'center',backgroundColor:'#f8f9fa',overflowY:'auto'}}>
+              <div style={{width:140,height:140,backgroundColor:'white',border:'5px solid #1a3a8a',borderRadius:'50%',display:'flex',position:'relative',alignItems:'center',justifyContent:'center',fontSize:60,marginBottom:20}}>
+                📦
+                <div style={{position:'absolute',bottom:5,right:5,background:'#00c300',color:'white',borderRadius:'50%',width:40,height:40,fontSize:20,display:'flex',alignItems:'center',justifyContent:'center',border:'3px solid white'}}>✔</div>
+              </div>
+              <h2 style={{color:'#1a3a8a',fontSize:24,marginBottom:4}}>Caixa {caixaSelecionada.papeleta}</h2>
+              <p style={{color:'#666',fontSize:14,marginBottom:20}}>Pedido: {caixaSelecionada.pedido}</p>
+              <div style={{width:'100%',background:'white',border:'1px solid #ddd',borderRadius:15,padding:15,marginBottom:20}}>
+                <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid #eee',fontSize:18}}><span>SKUs:</span><strong>{caixaSelecionada.itens.length}</strong></div>
+                <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',fontSize:18}}><span>Peças:</span><strong>{caixaSelecionada.itens.reduce((a,i)=>a+i.qtd,0)}</strong></div>
+              </div>
+              <div style={{width:'100%',background:'white',border:'1px solid #ddd',borderRadius:15,padding:15,marginBottom:20}}>
+                {caixaSelecionada.itens.map(item => (
+                  <div key={item.id} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid #eee',fontSize:14}}>
+                    <span>{item.ref} — {item.cor} — {item.tam}</span>
+                    <span style={{color:'#00c300',fontWeight:'bold'}}>✔ {item.qtd}</span>
+                  </div>
+                ))}
+              </div>
+              <button style={{width:'100%',padding:16,backgroundColor:'#6f42c1',color:'white',border:'none',borderRadius:15,fontSize:18,fontWeight:'bold',cursor:'pointer'}} onClick={() => setCaixaSelecionada(null)}>← VOLTAR</button>
             </div>
           </>
         )}
