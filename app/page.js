@@ -189,7 +189,10 @@ export default function Home() {
                 <button style={estilos.btnCam} onClick={() => setScanner('operador')}>📷</button>
               </div>
               <button style={estilos.btnEntrar} onClick={fazerLogin}>ENTRAR</button>
-              </main>
+              <a href="/codigos" style={{textAlign:'center',color:'#00c3ff',fontSize:13,marginTop:8,textDecoration:'none'}}>
+                📋 Ver códigos de demonstração
+              </a>
+            </main>
           </>
         )}
 
@@ -437,13 +440,14 @@ const estilos = {
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'flex-start',
-    minHeight: '100vh',
+    height: '100vh',
+    overflow: 'hidden',
   },
   container: {
     backgroundColor: 'white',
     width: '100%',
     maxWidth: 480,
-    minHeight: '100vh',
+    height: '100vh',
     border: 'none',
     display: 'flex',
     flexDirection: 'column',

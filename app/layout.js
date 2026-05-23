@@ -3,12 +3,7 @@ export const metadata = {
   description: 'Sistema de Picking - Grupo Kyly',
   manifest: '/manifest.json',
   themeColor: '#00c3ff',
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'default',
-    title: 'Kyly Picking',
-  },
-  viewport: 'width=device-width, initial-scale=1, maximum-scale=1',
+  viewport: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no',
 };
 
 export default function RootLayout({ children }) {
@@ -21,7 +16,7 @@ export default function RootLayout({ children }) {
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Kyly Picking" />
       </head>
-      <body style={{ margin: 0, padding: 0, backgroundColor: '#1a1a1a' }}>
+      <body style={{ margin: 0, padding: 0, backgroundColor: '#1a1a1a', overflow: 'hidden', height: '100vh' }}>
         {children}
       </body>
     </html>
