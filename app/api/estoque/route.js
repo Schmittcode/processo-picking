@@ -12,9 +12,14 @@ export async function GET() {
     const resultado = [];
     for (const caixa of caixas) {
       const itens = await sql`
-        SELECT * FROM itens_picking WHERE papeleta = ${caixa.papeleta} ORDER BY id
+        SELECT * FROM itens_picking 
+        WHERE papeleta = ${caixa.papeleta} 
+        ORDER BY id
       `;
-      resultado.push({ ...caixa, itens });
+      // Calcula progresso geral da caixa
+      const totalQtd = itens.reduce((a, i) => a + i.qtd, 0);
+      const totalColetado = itens.reduce((a, i) => a + i.qtd_coletada, 0);
+      resultado.push({ ...caixa, itens, totalQtd, totalColetado });
     }
 
     return Response.json({ success: true, caixas: resultado });
