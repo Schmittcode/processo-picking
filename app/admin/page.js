@@ -5,16 +5,16 @@ export default function AdminPage() {
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
-  async function chamar(url, body = null) {
+  async function chamar(url, method = 'GET', body = null) {
     setLoading(true);
-    setMsg('');
+    setMsg('Processando...');
     try {
-      const res = await fetch(url, {
-        method: body ? 'POST' : 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        body: body ? JSON.stringify(body) : null
-      });
-      const data = await res.json();
+      const opts = { method, headers: { 'Content-Type': 'application/json' } };
+      if (body) opts.body = JSON.stringify(body);
+      const res = await fetch(url, opts);
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = { message: text }; }
       setMsg(data.message || data.error || JSON.stringify(data));
     } catch (e) {
       setMsg('Erro: ' + e.message);
@@ -25,72 +25,63 @@ export default function AdminPage() {
   return (
     <div style={{ backgroundColor: '#1a1a1a', minHeight: '100vh', padding: 20, fontFamily: 'sans-serif' }}>
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
-
         <h1 style={{ color: '#00c3ff', textAlign: 'center', marginBottom: 5 }}>⚙️ Admin</h1>
-        <p style={{ color: '#888', textAlign: 'center', fontSize: 13, marginBottom: 30 }}>Gerenciamento de dados de teste</p>
+        <p style={{ color: '#888', textAlign: 'center', fontSize: 13, marginBottom: 20 }}>Gerenciamento de dados de teste</p>
 
         {msg && (
-          <div style={{ backgroundColor: '#00c300', color: 'white', padding: 15, borderRadius: 10, marginBottom: 20, textAlign: 'center', fontWeight: 'bold' }}>
+          <div style={{ backgroundColor: msg.includes('Erro') ? '#cc0000' : '#00875a', color: 'white', padding: 15, borderRadius: 10, marginBottom: 20, textAlign: 'center', fontWeight: 'bold', whiteSpace: 'pre-line' }}>
             {msg}
           </div>
         )}
 
-        {/* RESET */}
         <div style={card}>
-          <h2 style={cardTitle}>🔄 Resetar para apresentação</h2>
-          <p style={cardDesc}>Apaga todo o progresso de caixas e bipagens. Use antes da demonstração!</p>
+          <h2 style={cardTitle}>🔄 Resetar tudo</h2>
+          <p style={cardDesc}>Apaga todos os dados. Use antes de cada demonstração!</p>
           <button style={{...btn, backgroundColor:'#ff4d4d'}} disabled={loading}
-            onClick={() => chamar('/api/admin/reset')}>
-            RESETAR TUDO
+            onClick={() => chamar('/api/admin/reset', 'GET')}>
+            {loading ? 'AGUARDE...' : 'RESETAR TUDO'}
           </button>
         </div>
 
-        {/* CAIXA 1 */}
         <div style={card}>
-          <h2 style={cardTitle}>📦 Caixa de Teste 1</h2>
-          <p style={cardDesc}>Papeleta: <strong style={{color:'#00c3ff'}}>06772401</strong> — 3 SKUs, 6 peças no total</p>
+          <h2 style={cardTitle}>📦 Caixa 1 — Papeleta 06772401</h2>
+          <p style={cardDesc}>3 SKUs: REF 1000079, 200045, 300012</p>
           <button style={{...btn, backgroundColor:'#223a8e'}} disabled={loading}
-            onClick={() => chamar('/api/admin/add-caixa', { numero: 1 })}>
-            ADICIONAR / RESETAR CAIXA 1
+            onClick={() => chamar('/api/admin/add-caixa', 'POST', { numero: 1 })}>
+            {loading ? 'AGUARDE...' : 'ADICIONAR CAIXA 1'}
           </button>
         </div>
 
-        {/* CAIXA 2 */}
         <div style={card}>
-          <h2 style={cardTitle}>📦 Caixa de Teste 2</h2>
-          <p style={cardDesc}>Papeleta: <strong style={{color:'#00c3ff'}}>09912345</strong> — 4 SKUs, 8 peças no total</p>
+          <h2 style={cardTitle}>📦 Caixa 2 — Papeleta 09912345</h2>
+          <p style={cardDesc}>4 SKUs: REF 400088, 500011, 600033, 700055</p>
           <button style={{...btn, backgroundColor:'#223a8e'}} disabled={loading}
-            onClick={() => chamar('/api/admin/add-caixa', { numero: 2 })}>
-            ADICIONAR / RESETAR CAIXA 2
+            onClick={() => chamar('/api/admin/add-caixa', 'POST', { numero: 2 })}>
+            {loading ? 'AGUARDE...' : 'ADICIONAR CAIXA 2'}
           </button>
         </div>
 
-        {/* CAIXA 3 */}
         <div style={card}>
-          <h2 style={cardTitle}>📦 Caixa de Teste 3</h2>
-          <p style={cardDesc}>Papeleta: <strong style={{color:'#00c3ff'}}>11100999</strong> — 2 SKUs, 4 peças no total</p>
+          <h2 style={cardTitle}>📦 Caixa 3 — Papeleta 11100999</h2>
+          <p style={cardDesc}>2 SKUs: REF 800077, 900099</p>
           <button style={{...btn, backgroundColor:'#223a8e'}} disabled={loading}
-            onClick={() => chamar('/api/admin/add-caixa', { numero: 3 })}>
-            ADICIONAR / RESETAR CAIXA 3
+            onClick={() => chamar('/api/admin/add-caixa', 'POST', { numero: 3 })}>
+            {loading ? 'AGUARDE...' : 'ADICIONAR CAIXA 3'}
           </button>
         </div>
 
-        {/* VER STATUS */}
         <div style={card}>
-          <h2 style={cardTitle}>📊 Ver status do banco</h2>
+          <h2 style={cardTitle}>📊 Status do banco</h2>
           <p style={cardDesc}>Mostra quantas caixas e bipagens existem</p>
           <button style={{...btn, backgroundColor:'#00875a'}} disabled={loading}
-            onClick={() => chamar('/api/admin/status')}>
-            VER STATUS
+            onClick={() => chamar('/api/admin/status', 'GET')}>
+            {loading ? 'AGUARDE...' : 'VER STATUS'}
           </button>
         </div>
 
         <div style={{ textAlign: 'center', marginTop: 20 }}>
           <a href="/" style={{ color: '#00c3ff', textDecoration: 'none', fontSize: 14 }}>← Voltar ao App</a>
         </div>
-
-        {loading && <p style={{ color: '#888', textAlign: 'center', marginTop: 20 }}>Processando...</p>}
-
       </div>
     </div>
   );
