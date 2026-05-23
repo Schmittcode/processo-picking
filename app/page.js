@@ -2,6 +2,12 @@
 import { useState, useEffect, useRef } from 'react';
 import Scanner from './components/Scanner';
 
+// SONS VIA WEB AUDIO API
+function beepSucesso() { try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.connect(gain); gain.connect(ctx.destination); osc.type = 'sine'; osc.frequency.setValueAtTime(1200, ctx.currentTime); gain.gain.setValueAtTime(0.3, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15); osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.15); } catch {} }
+function beepDuplo() { try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); [0, 0.18].forEach(d => { const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type = 'sine'; o.frequency.setValueAtTime(1400, ctx.currentTime+d); g.gain.setValueAtTime(0.3, ctx.currentTime+d); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+d+0.12); o.start(ctx.currentTime+d); o.stop(ctx.currentTime+d+0.12); }); } catch {} }
+function beepErro() { try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.connect(gain); gain.connect(ctx.destination); osc.type = 'sawtooth'; osc.frequency.setValueAtTime(300, ctx.currentTime); osc.frequency.linearRampToValueAtTime(150, ctx.currentTime+0.4); gain.gain.setValueAtTime(0.4, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.4); osc.start(ctx.currentTime); osc.stop(ctx.currentTime+0.4); } catch {} }
+function beepFinalizado() { try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); [0,0.15,0.3].forEach((d,i) => { const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type = 'sine'; o.frequency.setValueAtTime([1000,1200,1600][i], ctx.currentTime+d); g.gain.setValueAtTime(0.3, ctx.currentTime+d); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+d+0.12); o.start(ctx.currentTime+d); o.stop(ctx.currentTime+d+0.12); }); } catch {} }
+
 export default function Home() {
   const [tela, setTela] = useState('login');
   const [supervisor, setSupervisor] = useState('');
@@ -113,6 +119,7 @@ export default function Home() {
       });
       const data = await res.json();
       if (!data.success) {
+        beepErro();
         setFeedback(data.tipo === 'sem_saldo' ? 'sem_saldo' : 'erro_sku');
         return;
       }
@@ -120,16 +127,19 @@ export default function Home() {
       if (data.completo) {
         const proxIdx = itemAtualIndice + 1;
         if (proxIdx < listaPicking.length) {
+          beepDuplo();
           setProximoEndereco(listaPicking[proxIdx].endereco);
           setFeedback('sku_completa');
           setTimeout(() => { setItemAtualIndice(proxIdx); setPecasColetadas(0); setFeedback(null); }, 1800);
         } else {
+          beepFinalizado();
           const totalPecas = listaPicking.reduce((acc, i) => acc + i.qtd, 0);
           setResumo({ itens: listaPicking.length, pecas: totalPecas });
           await salvarCaixa(true);
           setTela('finalizada');
         }
       } else {
+        beepSucesso();
         setPecasColetadas(novasPecas);
         setFeedback('sucesso');
         setTimeout(() => setFeedback(null), 600);
