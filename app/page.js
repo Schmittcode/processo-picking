@@ -2,11 +2,31 @@
 import { useState, useEffect, useRef } from 'react';
 import Scanner from './components/Scanner';
 
-// SONS VIA WEB AUDIO API
-function beepSucesso() { try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.connect(gain); gain.connect(ctx.destination); osc.type = 'sine'; osc.frequency.setValueAtTime(1200, ctx.currentTime); gain.gain.setValueAtTime(0.3, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15); osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.15); } catch {} }
-function beepDuplo() { try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); [0, 0.18].forEach(d => { const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type = 'sine'; o.frequency.setValueAtTime(1400, ctx.currentTime+d); g.gain.setValueAtTime(0.3, ctx.currentTime+d); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+d+0.12); o.start(ctx.currentTime+d); o.stop(ctx.currentTime+d+0.12); }); } catch {} }
-function beepErro() { try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.connect(gain); gain.connect(ctx.destination); osc.type = 'sawtooth'; osc.frequency.setValueAtTime(300, ctx.currentTime); osc.frequency.linearRampToValueAtTime(150, ctx.currentTime+0.4); gain.gain.setValueAtTime(0.4, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.4); osc.start(ctx.currentTime); osc.stop(ctx.currentTime+0.4); } catch {} }
-function beepFinalizado() { try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); [0,0.15,0.3].forEach((d,i) => { const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type = 'sine'; o.frequency.setValueAtTime([1000,1200,1600][i], ctx.currentTime+d); g.gain.setValueAtTime(0.3, ctx.currentTime+d); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+d+0.12); o.start(ctx.currentTime+d); o.stop(ctx.currentTime+d+0.12); }); } catch {} }
+// ============================================================
+// SONS - volume alto via Web Audio API
+// ============================================================
+function beep(freq, duration, type = 'sine', volume = 1.0) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    gain.gain.setValueAtTime(volume, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + duration);
+  } catch {}
+}
+
+function beepSucesso()   { beep(1400, 0.12, 'sine', 1.0); }
+function beepDuplo()     { beep(1400, 0.1, 'sine', 1.0); setTimeout(() => beep(1700, 0.15, 'sine', 1.0), 160); }
+function beepLogin()     { beep(1200, 0.1, 'sine', 1.0); }
+function beepCaixa()     { beep(1000, 0.12, 'sine', 1.0); setTimeout(() => beep(1300, 0.12, 'sine', 1.0), 160); }
+function beepErro()      { beep(280, 0.5, 'sawtooth', 1.0); }
+function beepFinalizado(){ beep(900,0.1,'sine',1.0); setTimeout(()=>beep(1100,0.1,'sine',1.0),150); setTimeout(()=>beep(1500,0.25,'sine',1.0),300); }
 
 export default function Home() {
   const [tela, setTela] = useState('login');
@@ -33,26 +53,15 @@ export default function Home() {
     if (tela === 'coleta' && !feedback) setTimeout(() => inputBipRef.current?.focus(), 200);
   }, [tela, feedback]);
 
-  // SCANNER HANDLER
   function handleScan(codigo) {
     const tipoAtual = scanner;
     setScanner(null);
-    if (tipoAtual === 'supervisor') {
-      setSupervisor(codigo);
-    }
-    if (tipoAtual === 'operador') {
-      setOperador(codigo);
-    }
-    if (tipoAtual === 'papeleta') {
-      setPapeleta(codigo);
-      abrirCaixaCodigo(codigo);
-    }
-    if (tipoAtual === 'peca') {
-      processarBipagemCodigo(codigo);
-    }
+    if (tipoAtual === 'supervisor') { beepLogin(); setSupervisor(codigo); }
+    if (tipoAtual === 'operador')   { beepLogin(); setOperador(codigo); }
+    if (tipoAtual === 'papeleta')   { beepCaixa(); setPapeleta(codigo); abrirCaixaCodigo(codigo); }
+    if (tipoAtual === 'peca')       { processarBipagemCodigo(codigo); }
   }
 
-  // LOGIN
   async function fazerLogin() {
     if (!supervisor || !operador) { alert('Bipe o Supervisor e o Operador!'); return; }
     try {
@@ -62,18 +71,16 @@ export default function Home() {
         body: JSON.stringify({ supervisor, operador })
       });
       const data = await res.json();
-      if (data.success) setTela('menu');
-      else alert('Acesso Negado! Verifique os códigos.');
+      if (data.success) { beepLogin(); setTela('menu'); }
+      else { beepErro(); alert('Acesso Negado! Verifique os códigos.'); }
     } catch { alert('Erro de conexão com o servidor.'); }
   }
 
-  // ABRIR CAIXA pelo input (Enter)
   async function abrirCaixa(e) {
     if (e.key !== 'Enter' || !papeleta) return;
     await abrirCaixaCodigo(papeleta);
   }
 
-  // ABRIR CAIXA pelo código
   async function abrirCaixaCodigo(cod) {
     if (!cod) return;
     try {
@@ -83,7 +90,8 @@ export default function Home() {
         body: JSON.stringify({ papeleta: cod })
       });
       const data = await res.json();
-      if (!data.success) { alert('Caixa não encontrada!'); return; }
+      if (!data.success) { beepErro(); alert('Caixa não encontrada!'); return; }
+      beepCaixa();
       setListaPicking(data.itens);
       setCaixaInfo(data.caixa);
       if (data.progresso.item_atual > 0 || data.progresso.pecas_no_item > 0) {
@@ -98,9 +106,8 @@ export default function Home() {
     } catch { alert('Erro ao abrir caixa.'); }
   }
 
-  function confirmarInicio() { setTela('coleta'); }
+  function confirmarInicio() { beepCaixa(); setTela('coleta'); }
 
-  // BIPAGEM pelo input
   async function processarBipagem(e) {
     if (e.key !== 'Enter' || !codigoDigitado) return;
     const codigo = codigoDigitado.trim();
@@ -108,7 +115,6 @@ export default function Home() {
     await processarBipagemCodigo(codigo);
   }
 
-  // BIPAGEM pelo código
   async function processarBipagemCodigo(codigo) {
     if (!codigo || !itemAtual) return;
     try {
@@ -174,7 +180,6 @@ export default function Home() {
     <div style={estilos.body}>
       <div style={estilos.container}>
 
-        {/* SCANNER OVERLAY */}
         {scanner && <Scanner onScan={handleScan} onClose={() => setScanner(null)} />}
 
         {/* ===== LOGIN ===== */}
@@ -186,7 +191,7 @@ export default function Home() {
               <div style={estilos.inputRow}>
                 <input ref={inputSupRef} style={estilos.input} value={supervisor}
                   onChange={e => setSupervisor(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && inputOpRef.current?.focus()}
+                  onKeyDown={e => { if(e.key==='Enter'){ beepLogin(); inputOpRef.current?.focus(); }}}
                   placeholder="Bipe ou digite o código" />
                 <button style={estilos.btnCam} onClick={() => setScanner('supervisor')}>📷</button>
               </div>
@@ -194,14 +199,11 @@ export default function Home() {
               <div style={estilos.inputRow}>
                 <input ref={inputOpRef} style={estilos.input} value={operador}
                   onChange={e => setOperador(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && fazerLogin()}
+                  onKeyDown={e => { if(e.key==='Enter'){ beepLogin(); fazerLogin(); }}}
                   placeholder="Bipe ou digite o código" />
                 <button style={estilos.btnCam} onClick={() => setScanner('operador')}>📷</button>
               </div>
               <button style={estilos.btnEntrar} onClick={fazerLogin}>ENTRAR</button>
-              <a href="/codigos" style={{textAlign:'center',color:'#00c3ff',fontSize:13,marginTop:8,textDecoration:'none'}}>
-                📋 Ver códigos de demonstração
-              </a>
             </main>
           </>
         )}
@@ -210,7 +212,7 @@ export default function Home() {
         {tela === 'menu' && (
           <>
             <header style={estilos.header}><h1 style={estilos.headerH1}>Menu Principal</h1></header>
-            <main style={{...estilos.main, gap: 12}}>
+            <main style={{...estilos.main, gap:12}}>
               <button style={{...estilos.btnMenu, backgroundColor:'#5cb85c', color:'white'}}
                 onClick={() => setTela('abertura')}>Montar Pedido</button>
               <button style={estilos.btnMenu}>Consultar Estoque</button>
@@ -243,7 +245,7 @@ export default function Home() {
           </>
         )}
 
-        {/* CARD CONFIRMAÇÃO CAIXA */}
+        {/* CONFIRMAÇÃO CAIXA */}
         {tela === 'abertura' && caixaInfo && !feedback && (
           <>
             <header style={estilos.header}><h1 style={estilos.headerH1}>Abertura de Caixa</h1></header>
@@ -258,19 +260,15 @@ export default function Home() {
                   <span>Pedido:</span><strong>{caixaInfo.pedido}</strong>
                 </div>
               </div>
-              <button style={{...estilos.btnConfirmar, marginTop:'auto'}} onClick={confirmarInicio}>
-                Confirmar e iniciar
-              </button>
-              <button style={estilos.btnCancelar} onClick={() => { setCaixaInfo(null); setPapeleta(''); }}>
-                CANCELAR
-              </button>
+              <button style={{...estilos.btnConfirmar, marginTop:'auto'}} onClick={confirmarInicio}>Confirmar e iniciar</button>
+              <button style={estilos.btnCancelar} onClick={() => { setCaixaInfo(null); setPapeleta(''); }}>CANCELAR</button>
             </main>
           </>
         )}
 
-        {/* ===== RETOMADA ===== */}
+        {/* RETOMADA */}
         {feedback === 'retomada' && (
-          <div style={{...estilos.overlay, backgroundColor:'white', zIndex:9999}}>
+          <div style={{...estilos.overlay, backgroundColor:'white', zIndex:9999, flexDirection:'column'}}>
             <header style={{...estilos.header, backgroundColor:'#ff7e1a'}}>
               <h1 style={estilos.headerH1}>⚠️ Caixa Parcial Identificada</h1>
             </header>
@@ -291,10 +289,9 @@ export default function Home() {
             <header style={estilos.header}><h1 style={estilos.headerH1}>Coleta de Peças</h1></header>
             <main style={{...estilos.main, alignItems:'center', gap:15}}>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',background:'#e0e0e0',border:'1px solid #999',borderRadius:10,padding:10,width:'100%'}}>
-                {[['Ref', itemAtual.ref],['Cor', itemAtual.cor],['Tam', itemAtual.tam]].map(([label, val]) => (
-                  <div key={label} style={{display:'flex',flexDirection:'column',alignItems:'center',fontSize:14}}>
-                    <span style={{color:'#666'}}>{label}</span>
-                    <strong style={{fontSize:16}}>{val}</strong>
+                {[['Ref',itemAtual.ref],['Cor',itemAtual.cor],['Tam',itemAtual.tam]].map(([l,v])=>(
+                  <div key={l} style={{display:'flex',flexDirection:'column',alignItems:'center',fontSize:14}}>
+                    <span style={{color:'#666'}}>{l}</span><strong style={{fontSize:16}}>{v}</strong>
                   </div>
                 ))}
               </div>
@@ -307,31 +304,27 @@ export default function Home() {
                 <div style={{fontSize:32,fontWeight:'bold'}}>{pecasColetadas}/{itemAtual.qtd}</div>
               </div>
               <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:'auto',width:'100%'}}>
-                <button style={{...estilos.btnColeta, backgroundColor:'#223a8e'}}
-                  onClick={() => setScanner('peca')}>📷 BIPAR PEÇA</button>
-                <button style={{...estilos.btnColeta, backgroundColor:'#ff7e1a'}}
-                  onClick={() => setFeedback('item_falta')}>⚠️ RETIRAR ITEM EM FALTA</button>
-                <button style={{...estilos.btnColeta, backgroundColor:'#8c8c8c'}}
-                  onClick={async () => { await salvarCaixa(false); setFeedback('parcial'); }}>💾 SALVAR CAIXA</button>
+                <button style={{...estilos.btnColeta,backgroundColor:'#223a8e'}} onClick={()=>setScanner('peca')}>📷 BIPAR PEÇA</button>
+                <button style={{...estilos.btnColeta,backgroundColor:'#ff7e1a'}} onClick={()=>{beepErro();setFeedback('item_falta');}}>⚠️ RETIRAR ITEM EM FALTA</button>
+                <button style={{...estilos.btnColeta,backgroundColor:'#8c8c8c'}} onClick={async()=>{await salvarCaixa(false);setFeedback('parcial');}}>💾 SALVAR CAIXA</button>
               </div>
               <input ref={inputBipRef} style={{position:'absolute',opacity:0,pointerEvents:'none'}}
-                value={codigoDigitado} onChange={e => setCodigoDigitado(e.target.value)}
-                onKeyDown={processarBipagem} />
+                value={codigoDigitado} onChange={e=>setCodigoDigitado(e.target.value)} onKeyDown={processarBipagem} />
             </main>
           </>
         )}
 
-        {/* SUCESSO PEÇA */}
-        {tela === 'coleta' && feedback === 'sucesso' && (
-          <div style={{...estilos.overlay, backgroundColor:'#4cd137', flexDirection:'column', alignItems:'center', paddingTop:60}}>
+        {/* SUCESSO */}
+        {tela==='coleta' && feedback==='sucesso' && (
+          <div style={{...estilos.overlay,backgroundColor:'#4cd137',flexDirection:'column',alignItems:'center',paddingTop:60}}>
             <div style={{fontSize:80,color:'white'}}>✔</div>
             <h1 style={{color:'white',fontSize:32,fontWeight:'bold'}}>1 Peça Lida</h1>
           </div>
         )}
 
         {/* SKU COMPLETA */}
-        {tela === 'coleta' && feedback === 'sku_completa' && (
-          <div style={{...estilos.overlay, backgroundColor:'white', flexDirection:'column'}}>
+        {tela==='coleta' && feedback==='sku_completa' && (
+          <div style={{...estilos.overlay,backgroundColor:'white',flexDirection:'column'}}>
             <header style={{backgroundColor:'#00c300',padding:20,textAlign:'center',width:'100%'}}>
               <span style={{fontSize:40,color:'white'}}>✔</span>
               <h1 style={{color:'white',fontSize:24,fontWeight:'bold'}}>SKU COMPLETA!</h1>
@@ -348,32 +341,32 @@ export default function Home() {
         )}
 
         {/* ERRO SKU */}
-        {tela === 'coleta' && feedback === 'erro_sku' && (
-          <div style={{...estilos.overlay, backgroundColor:'#ff0000', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:20, textAlign:'center', color:'white'}}>
+        {tela==='coleta' && feedback==='erro_sku' && (
+          <div style={{...estilos.overlay,backgroundColor:'#ff0000',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:20,textAlign:'center',color:'white'}}>
             <div style={{width:110,height:110,border:'5px solid white',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:70,fontWeight:'bold',marginBottom:20}}>✖</div>
             <h1 style={{fontSize:36,fontWeight:900,marginBottom:10}}>ERRO</h1>
             <p style={{fontSize:24,fontWeight:'bold',marginBottom:25}}>SKU não pertence à caixa</p>
             <div style={{backgroundColor:'#8b0000',border:'2px solid white',borderRadius:10,padding:20,width:'100%',fontSize:19,fontWeight:'bold',marginBottom:40}}>Verifique o código e tente novamente</div>
             <button style={{backgroundColor:'white',color:'#ff0000',border:'none',borderRadius:15,padding:18,width:'100%',fontSize:22,fontWeight:900,textTransform:'uppercase',cursor:'pointer'}}
-              onClick={() => setFeedback(null)}>CONFIRMAR</button>
+              onClick={()=>setFeedback(null)}>CONFIRMAR</button>
           </div>
         )}
 
         {/* SEM SALDO */}
-        {tela === 'coleta' && feedback === 'sem_saldo' && (
-          <div style={{...estilos.overlay, backgroundColor:'#ff0000', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:20, textAlign:'center', color:'white'}}>
+        {tela==='coleta' && feedback==='sem_saldo' && (
+          <div style={{...estilos.overlay,backgroundColor:'#ff0000',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:20,textAlign:'center',color:'white'}}>
             <div style={{width:110,height:110,border:'5px solid white',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:80,fontWeight:'bold',marginBottom:20}}>!</div>
             <h1 style={{fontSize:36,fontWeight:900,marginBottom:10}}>ERRO</h1>
             <p style={{fontSize:24,fontWeight:'bold',marginBottom:25}}>Peça sem saldo</p>
             <div style={{backgroundColor:'#b30000',border:'3px solid white',borderRadius:15,padding:25,width:'100%',fontSize:20,fontWeight:'bold',marginBottom:50,lineHeight:1.2}}>Esta peça já foi bipada ou não é mais necessária</div>
             <button style={{backgroundColor:'#ffe6e6',color:'#ff0000',border:'none',borderRadius:15,padding:20,width:'100%',fontSize:32,fontWeight:900,textTransform:'uppercase',cursor:'pointer'}}
-              onClick={() => setFeedback(null)}>CONFIRMAR</button>
+              onClick={()=>setFeedback(null)}>CONFIRMAR</button>
           </div>
         )}
 
         {/* ITEM EM FALTA */}
-        {tela === 'coleta' && feedback === 'item_falta' && (
-          <div style={{...estilos.overlay, backgroundColor:'white', flexDirection:'column', border:'1px solid #ff7e1a'}}>
+        {tela==='coleta' && feedback==='item_falta' && (
+          <div style={{...estilos.overlay,backgroundColor:'white',flexDirection:'column',border:'1px solid #ff7e1a'}}>
             <header style={{backgroundColor:'#ff7e1a',padding:10,textAlign:'center',color:'white'}}>
               <h1 style={{fontSize:22,fontWeight:'bold'}}>⚠️ Item em Falta</h1>
             </header>
@@ -384,7 +377,7 @@ export default function Home() {
               <p style={{color:'#555',marginBottom:30,fontSize:16}}>Deseja buscar localizações alternativas no estoque?</p>
               <div style={{width:'100%',display:'flex',flexDirection:'column',gap:15}}>
                 <button style={{backgroundColor:'#00c800',color:'white',border:'none',padding:18,borderRadius:12,fontWeight:'bold',fontSize:18,cursor:'pointer'}}
-                  onClick={() => alert('Funcionalidade em desenvolvimento')}>SIM, BUSCAR ALTERNATIVA</button>
+                  onClick={()=>alert('Funcionalidade em desenvolvimento')}>SIM, BUSCAR ALTERNATIVA</button>
                 <button style={{backgroundColor:'#5d6166',color:'white',border:'none',padding:18,borderRadius:12,fontWeight:'bold',fontSize:18,cursor:'pointer'}}
                   onClick={pularSku}>NÃO, PULAR SKU</button>
               </div>
@@ -393,8 +386,8 @@ export default function Home() {
         )}
 
         {/* PARCIAL */}
-        {feedback === 'parcial' && (
-          <div style={{...estilos.overlay, backgroundColor:'#ff7e1a', flexDirection:'column'}}>
+        {feedback==='parcial' && (
+          <div style={{...estilos.overlay,backgroundColor:'#ff7e1a',flexDirection:'column'}}>
             <header style={{backgroundColor:'#e66a00',padding:10,textAlign:'center',color:'white'}}>
               <h1 style={{fontSize:20}}>⚠️ Atenção</h1>
             </header>
@@ -407,16 +400,16 @@ export default function Home() {
               </div>
               <p style={{fontSize:16,marginBottom:40,opacity:0.9}}>A caixa poderá ser completada posteriormente</p>
               <button style={{backgroundColor:'#fff1e6',color:'#ff7e1a',border:'none',borderRadius:15,padding:20,width:'100%',fontSize:24,fontWeight:900,textTransform:'uppercase',cursor:'pointer'}}
-                onClick={() => { setFeedback(null); setTela('menu'); }}>CONFIRMAR E SALVAR</button>
+                onClick={()=>{setFeedback(null);setTela('menu');}}>CONFIRMAR E SALVAR</button>
             </div>
           </div>
         )}
 
         {/* FINALIZADA */}
-        {tela === 'finalizada' && (
+        {tela==='finalizada' && (
           <>
-            <header style={{...estilos.header, backgroundColor:'#1a3a8a'}}>
-              <h1 style={{...estilos.headerH1, fontSize:24, fontWeight:900}}>CAIXA FINALIZADA!</h1>
+            <header style={{...estilos.header,backgroundColor:'#1a3a8a'}}>
+              <h1 style={{...estilos.headerH1,fontSize:24,fontWeight:900}}>CAIXA FINALIZADA!</h1>
             </header>
             <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:30,textAlign:'center',backgroundColor:'#f8f9fa'}}>
               <div style={{width:140,height:140,backgroundColor:'white',border:'5px solid #1a3a8a',borderRadius:'50%',display:'flex',position:'relative',alignItems:'center',justifyContent:'center',fontSize:60,marginBottom:20}}>
@@ -445,28 +438,8 @@ export default function Home() {
 }
 
 const estilos = {
-  body: {
-    backgroundColor: '#00c3ff',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    width: '100vw',
-    height: '100vh',
-    height: '100dvh',
-    overflow: 'hidden',
-  },
-  container: {
-    backgroundColor: 'white',
-    width: '100%',
-    maxWidth: 480,
-    height: '100vh',
-    height: '100dvh',
-    border: 'none',
-    display: 'flex',
-    flexDirection: 'column',
-    position: 'relative',
-    overflow: 'hidden',
-  },
+  body: { backgroundColor:'#00c3ff', display:'flex', justifyContent:'center', alignItems:'flex-start', width:'100vw', height:'100dvh', overflow:'hidden' },
+  container: { backgroundColor:'white', width:'100%', maxWidth:480, height:'100dvh', border:'none', display:'flex', flexDirection:'column', position:'relative', overflow:'hidden' },
   header: { backgroundColor:'#00c3ff', padding:15, textAlign:'center', width:'100%' },
   headerH1: { color:'white', fontSize:20, fontWeight:'normal', textTransform:'uppercase', margin:0 },
   main: { padding:20, display:'flex', flexDirection:'column', flex:1, width:'100%' },
